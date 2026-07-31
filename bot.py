@@ -40,6 +40,9 @@ from modules import join as mod_join
 from modules import messages as mod_msg
 from modules import duyet as mod_duyet
 
+# ─── Chức năng TIKTOK (tool.py) ───
+import tool as mod_tiktok
+
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     level=logging.INFO,
@@ -1809,10 +1812,14 @@ async def _post_init(app: Application):
     # Khôi phục scheduler auto-leave sau khi Railway restart
     log.info("Restoring join auto-leave scheduler...")
     asyncio.create_task(mod_join.scheduler_loop())
+    # Bật scheduler đăng TikTok 07:00 mỗi ngày
+    mod_tiktok.start_scheduler(app)
 
 
 def main():
     app = Application.builder().token(BOT_TOKEN).post_init(_post_init).build()
+    # Gắn chức năng TIKTOK trước các handler cũ (group=-1, không ảnh hưởng code cũ)
+    mod_tiktok.register(app)
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CallbackQueryHandler(on_del_pick, pattern=r"^acc:delpick:"))
     app.add_handler(CallbackQueryHandler(on_callback))
