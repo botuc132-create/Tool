@@ -13,6 +13,7 @@ from typing import Optional
 from telegram import (
     InlineKeyboardButton, InlineKeyboardMarkup, Update, InputFile,
     ReplyKeyboardMarkup, ReplyKeyboardRemove,
+    MenuButtonWebApp, WebAppInfo,
 )
 from telegram.constants import ParseMode
 from telegram.ext import (
@@ -41,6 +42,7 @@ from modules import messages as mod_msg
 from modules import duyet as mod_duyet
 from modules import naprut_task as mod_naprut
 import naprut_checkin as np_sched
+import webapp as mini_app  # Telegram Mini App (chạy chung tiến trình)
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -94,6 +96,7 @@ def has_perm(uid: int, perm: str) -> bool:
 def kb_main(uid: int | None = None):
     # Reply keyboard ở bàn phím — vuốt xuống là ẩn được
     rows = [
+        ["📱 MINI APP"],
         ["🛡 CHECK JOIN", "🤖 AUTO"],
         ["📢 TOOL RẢI", "🎯 REF"],
         ["💬 SEX SPAM", "🚪 JOIN GROUP"],
@@ -132,6 +135,7 @@ REPLY_TEXT_MAP = {
     "📊 STATUS": "m:status",
     "⛔ STOP TASK": "m:stop",
     "🏠 HOME": "m:home",
+    "📱 MINI APP": "m:miniapp",
 }
 
 # Các step đang chờ user nhập NỘI DUNG TỰ DO (cho phép cả /command)
@@ -345,6 +349,35 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 
+# ─── Mini App ───────────────────────────────────────────
+def kb_miniapp():
+    url = mini_app.get_webapp_url()
+    if not url:
+        return None
+    return InlineKeyboardMarkup([[InlineKeyboardButton(
+        "📱 MỞ MINI APP", web_app=WebAppInfo(url=url))]])
+
+
+async def send_miniapp_button(update: Update):
+    kb = kb_miniapp()
+    if kb is None:
+        await update.effective_chat.send_message(
+            "⚠️ Mini App chưa được cấu hình URL (WEBAPP_URL / Railway domain).")
+        return
+    await update.effective_chat.send_message(
+        banner("📱 MINI APP", "Bấm nút bên dưới để mở giao diện ngay trong Telegram."),
+        reply_markup=kb, parse_mode=ParseMode.HTML)
+
+
+async def cmd_app(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    if not is_admin(uid):
+        await update.message.reply_text(
+            f"{RENT_MESSAGE}\n\nUser ID: <code>{uid}</code>", parse_mode=ParseMode.HTML)
+        return
+    await send_miniapp_button(update)
+
+
 # ─── dispatch (dùng chung cho callback + reply keyboard) ─
 async def dispatch_action(update, ctx, action: str):
     uid = update.effective_user.id
@@ -352,6 +385,8 @@ async def dispatch_action(update, ctx, action: str):
     if action == "m:home":
         s.step = None; s.data.clear()
         await show_home(update); return
+    if action == "m:miniapp":
+        await send_miniapp_button(update); return
     if action == "m:stop":
         if not has_perm(uid, "STOP"):
             await send(update, "❌ Không có quyền STOP", kb_main(uid)); return
@@ -2047,10 +2082,40 @@ async def _post_init(app: Application):
     restored = await NP_SCHED.restore()
     log.info("NAPRUT schedule restored: %s", restored)
 
+    # Mini App: web server chạy chung event loop (KHÔNG tạo polling thứ hai)
+    try:
+        hooks = mini_app.Hooks(
+            dispatch=dispatch_action,
+            get_state=st,
+            get_np_status=lambda: (NP_SCHED.status() if NP_SCHED else {}),
+            schedule_expiry=schedule_expiry,
+            rent_contact=RENT_CONTACT,
+        )
+        app.bot_data["_webapp_runner"] = await mini_app.start_web_server(app, hooks)
+    except Exception:
+        log.exception("Không khởi động được Mini App server (bot vẫn chạy bình thường)")
+    url = mini_app.get_webapp_url()
+    if url:
+        try:
+            await app.bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(text="Mini App", web_app=WebAppInfo(url=url)))
+            log.info("Mini App menu button set: %s", url)
+        except Exception:
+            log.exception("Không đặt được menu button Mini App")
+    else:
+        log.warning("Chưa có WEBAPP_URL/RAILWAY_PUBLIC_DOMAIN → chưa gắn nút Mini App")
+
+
+async def _post_shutdown(app: Application):
+    runner = app.bot_data.get("_webapp_runner")
+    if runner is not None:
+        await runner.cleanup()
+
 
 def main():
-    app = Application.builder().token(BOT_TOKEN).post_init(_post_init).build()
+    app = Application.builder().token(BOT_TOKEN).post_init(_post_init).post_shutdown(_post_shutdown).build()
     app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("app", cmd_app))
     app.add_handler(CallbackQueryHandler(on_del_pick, pattern=r"^acc:delpick:"))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(MessageHandler(filters.Document.ALL, on_document))
