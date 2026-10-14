@@ -301,7 +301,7 @@ function renderChat(j){
     const kb=(m.kb||[]).map(row=>'<div class="kbr">'+row.map(b=>b.data!=null
       ?`<button data-mid="${esc(m.id)}" data-cb="${esc(b.data)}">${esc(b.text)}</button>`
       :b.url?`<button data-url="${esc(b.url)}">${esc(b.text)} ↗</button>`:"").join("")+'</div>').join("");
-    return `<div class="bub ${m.from==="user"?"u":""}">${m.doc?"📎 "+esc(m.doc)+"\n":""}${safeHtml(m.html)}${kb}</div>`;
+    return `<div class="bub ${m.from==="user"?"u":""}">${m.doc?"📎 "+esc(m.doc)+"\n":""}${safeHtml(m.html)}${m.file?`<div class="kbr"><button data-file="${esc(m.file)}" data-fname="${esc(m.doc||"file")}">⬇️ Tải file</button></div>`:""}${kb}</div>`;
   }).join("");
   if(atBottom||CHAT_LAST<0) c.scrollTop=c.scrollHeight;
 }
@@ -329,7 +329,10 @@ async function sendText(){
 $("#sendBtn").onclick=sendText;
 $("#msgIn").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendText(); } });
 $("#chat").addEventListener("click",async e=>{
-  const u=e.target.closest("[data-url]"); if(u){ openTg(u.dataset.url); return; }
+  const u=e.target.closest("[data-url]"); if(u){ const x=u.dataset.url; if(/^https?:\/\/t\.me\//.test(x)) openTg(x); else { try{ tg.openLink(x); }catch(_){ window.open(x,"_blank"); } } return; }
+  const f=e.target.closest("[data-file]"); if(f){ const url=location.origin+"/f/"+f.dataset.file;
+    try{ if(tgSupports("8.0")&&typeof tg.downloadFile==="function"){ tg.downloadFile({url,file_name:f.dataset.fname}); return; } }catch(_){}
+    try{ tg.openLink(url); }catch(_){ window.open(url,"_blank"); } return; }
   const b=e.target.closest("[data-cb]"); if(!b) return;
   haptic(); b.style.opacity=.5;
   try{ const r=await api("/api/press",{message_id:b.dataset.mid,data:b.dataset.cb}); if(!r.ok) toast("❌ "+(r.error||"lỗi")); }catch(_){ toast("❌ Lỗi"); }
