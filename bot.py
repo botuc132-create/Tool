@@ -39,9 +39,8 @@ from modules import admins as mod_admins
 from modules import join as mod_join
 from modules import messages as mod_msg
 from modules import duyet as mod_duyet
-
-# ─── Chức năng TIKTOK (tool.py) ───
-import tool as mod_tiktok
+from modules import naprut_task as mod_naprut
+import naprut_checkin as np_sched
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -99,6 +98,7 @@ def kb_main(uid: int | None = None):
         ["📢 TOOL RẢI", "🎯 REF"],
         ["💬 SEX SPAM", "🚪 JOIN GROUP"],
         ["✅ DUYỆT NẠP"],
+        ["🎁 ĐIỂM DANH NAPRUT"],
         ["👤 QUẢN LÝ ACC"],
     ]
     # Chỉ Owner mới thấy ô QUẢN LÝ ADMIN
@@ -125,6 +125,7 @@ REPLY_TEXT_MAP = {
     "💬 SEX SPAM":   "m:spam",
     "🚪 JOIN GROUP": "m:join",
     "✅ DUYỆT NẠP":  "m:duyet",
+    "🎁 ĐIỂM DANH NAPRUT": "m:naprut",
     "👤 QUẢN LÝ ACC": "m:acc",
     "🛠 QUẢN LÝ ADMIN": "m:admins",
     "📜 LOGS":   "m:logs",
@@ -394,6 +395,8 @@ async def dispatch_action(update, ctx, action: str):
         if not has_perm(uid, "DUYET"):
             await send(update, "❌ Không có quyền DUYỆT NẠP", kb_main(uid)); return
         await flow_duyet_start(update, ctx); return
+    if action == "m:naprut":
+        await naprut_menu(update, ctx); return
     if action == "m:admins":
         if not mod_admins.is_owner(uid):
             await send(update, "❌ Chỉ Owner mới được quản lý admin", kb_main(uid)); return
@@ -421,6 +424,13 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     data = q.data
     s = st(uid)
+
+    # Tool điểm danh NAPRUT
+    if data == "m:naprut":
+        s.step = None; s.data.clear()
+        await naprut_menu(update, ctx); return
+    if data.startswith("np:"):
+        await on_naprut_cb(update, ctx); return
 
     # control
     if data == "ctrl:cancel":
@@ -1273,6 +1283,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         elif s.step.startswith("addacc."): await step_addacc(update, ctx, txt)
         elif s.step.startswith("join."):  await step_join(update, ctx, txt)
         elif s.step.startswith("duyet."): await step_duyet(update, ctx, txt)
+        elif s.step.startswith("np."):    await step_naprut(update, ctx, txt)
         elif s.step.startswith("admadd."): await step_adm_add(update, ctx, txt)
         elif s.step.startswith("admexp."): await step_adm_exp(update, ctx, txt)
         elif s.step.startswith("admdel."): await step_adm_del(update, ctx, txt)
@@ -1807,19 +1818,238 @@ async def launch_duyet(update, ctx):
     s.task = asyncio.create_task(runner())
 
 
+# ════════════════════════════════════════════════════════
+# TOOL ĐIỂM DANH NAPRUT (@naprutclmmnew_bot) – lịch 7 ngày
+# ════════════════════════════════════════════════════════
+NP_SCHED: "np_sched.SevenDayScheduler | None" = None
+
+_NP_STATUS_LABEL = {
+    "scheduled": "⏳ Đang chờ giờ chạy",
+    "running": "▶️ Đang điểm danh",
+    "task_error": "⚠️ Lần chạy gần nhất bị lỗi",
+    "stopped": "⏹ Đã tắt",
+    "completed": "🏁 Đã hoàn tất 7 ngày",
+}
+
+
+def _np_fmt_dt(iso: str | None) -> str:
+    if not iso:
+        return "-"
+    try:
+        from datetime import datetime as _dt
+        return _dt.fromisoformat(iso).astimezone(np_sched.TZ).strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        return iso
+
+
+def _np_can_control(uid: int) -> bool:
+    stt = NP_SCHED.status() if NP_SCHED else {}
+    return mod_admins.is_owner(uid) or not stt.get("owner_id") or stt.get("owner_id") == uid
+
+
+def kb_naprut():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔛 Bật Tool", callback_data="np:on"),
+         InlineKeyboardButton("⏹ Tắt Tool", callback_data="np:off")],
+        [InlineKeyboardButton("👤 Chọn tài khoản", callback_data="np:acc"),
+         InlineKeyboardButton("🕒 Cài đặt giờ chạy", callback_data="np:time")],
+        [InlineKeyboardButton("📊 Trạng thái Tool", callback_data="np:status")],
+        [InlineKeyboardButton("⬅️ BACK", callback_data="m:home")],
+    ])
+
+
+def kb_np_back():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ MENU ĐIỂM DANH", callback_data="m:naprut"),
+         InlineKeyboardButton("🏠 HOME", callback_data="m:home")],
+    ])
+
+
+def _np_status_text() -> str:
+    stt = NP_SCHED.status() if NP_SCHED else {}
+    if not stt:
+        return "Chưa có lịch nào được bật."
+    done = stt.get("completed_dates") or []
+    return (
+        f"Trạng thái: <b>{'🟢 ĐANG BẬT' if stt.get('active') else '🔴 ĐANG TẮT'}</b>\n"
+        f"Chi tiết: {_NP_STATUS_LABEL.get(stt.get('status'), stt.get('status', '-'))}\n"
+        f"Tài khoản: <code>{_html_escape(str(stt.get('account', '-')))}</code>\n"
+        f"Giờ chạy: <b>{stt.get('daily_time', '-')}</b> (UTC+7)\n"
+        f"Bắt đầu: {_np_fmt_dt(stt.get('started_at'))}\n"
+        f"Kết thúc: {_np_fmt_dt(stt.get('expires_at'))}\n"
+        f"Lần đầu: {_np_fmt_dt(stt.get('first_run'))}\n"
+        f"Đã xử lý: <b>{len(done)}</b> ngày ({', '.join(done[-7:]) or '-'})\n"
+        f"Kết quả gần nhất: {_html_escape(str(stt.get('last_result') or '-'))}\n\n"
+        "ℹ️ Lịch chỉ chạy khi tiến trình bot đang hoạt động."
+    )
+
+
+async def naprut_menu(update, ctx):
+    await send(update, banner("🎁 ĐIỂM DANH NAPRUT",
+        f"Bot đích: @{mod_naprut.TARGET_BOT}\n"
+        "Chạy 1 lần/ngày trong 7 ngày theo giờ Việt Nam (UTC+7).\n"
+        "Chỉ điểm danh — không nạp/rút/thanh toán.\n\n" + _np_status_text()),
+        kb_naprut())
+
+
+def kb_np_pick(uid: int):
+    rows, row = [], []
+    for name in list_sessions_for(uid):
+        row.append(InlineKeyboardButton(f"👤 {name}", callback_data=f"np:pick:{name}"))
+        if len(row) == 2:
+            rows.append(row); row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton("❌ HUỶ", callback_data="m:naprut"),
+                 InlineKeyboardButton("🏠 HOME", callback_data="m:home")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def _np_ask_account(update, ctx):
+    uid = update.effective_user.id
+    s = st(uid)
+    if not list_sessions_for(uid):
+        await send(update, banner("⚠ ĐIỂM DANH NAPRUT",
+            "Chưa có acc nào. Vào QUẢN LÝ ACC để thêm trước."), kb_np_back()); return
+    s.step = "np.pick"
+    await send(update, banner("👤 CHỌN TÀI KHOẢN",
+        "Chọn tài khoản sẽ điểm danh mỗi ngày:"), kb_np_pick(uid))
+
+
+async def _np_ask_time(update, ctx):
+    s = st(update.effective_user.id)
+    s.step = "np.time"
+    acc = s.data.get("np_account")
+    await send(update, banner("🕒 CÀI ĐẶT GIỜ CHẠY",
+        (f"Tài khoản: <code>{_html_escape(acc)}</code>\n\n" if acc else "") +
+        "Nhập giờ chạy mỗi ngày theo dạng <b>HH:MM</b> (giờ Việt Nam UTC+7).\n"
+        "Ví dụ: <code>08:30</code> hoặc <code>20:15</code>"), kb_np_back())
+
+
+async def _np_ask_confirm(update, ctx):
+    s = st(update.effective_user.id)
+    acc, tm = s.data.get("np_account"), s.data.get("np_time")
+    t = np_sched.parse_run_time(tm)
+    first = np_sched.next_run_datetime(t)
+    s.step = "np.confirm"
+    await send(update, banner("✅ XÁC NHẬN BẬT LỊCH",
+        f"Tài khoản: <code>{_html_escape(acc)}</code>\n"
+        f"Giờ chạy: <b>{tm}</b> mỗi ngày (UTC+7)\n"
+        f"Lần chạy đầu: <b>{first.strftime('%d/%m/%Y %H:%M')}</b>\n"
+        f"Thời hạn: 7 ngày kể từ lúc bật"),
+        InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ XÁC NHẬN BẬT", callback_data="np:confirm"),
+             InlineKeyboardButton("❌ HUỶ", callback_data="m:naprut")],
+            [InlineKeyboardButton("👤 Đổi tài khoản", callback_data="np:acc"),
+             InlineKeyboardButton("🕒 Đổi giờ", callback_data="np:time")],
+        ]))
+
+
+async def _np_next(update, ctx):
+    """Hỏi tiếp phần còn thiếu: tài khoản -> giờ -> xác nhận."""
+    s = st(update.effective_user.id)
+    if not s.data.get("np_account"):
+        await _np_ask_account(update, ctx)
+    elif not s.data.get("np_time"):
+        await _np_ask_time(update, ctx)
+    else:
+        await _np_ask_confirm(update, ctx)
+
+
+async def on_naprut_cb(update, ctx):
+    q = update.callback_query
+    uid = q.from_user.id
+    s = st(uid)
+    data = q.data
+    if NP_SCHED is None:
+        await send(update, "⏳ Bộ lập lịch đang khởi động, thử lại sau vài giây.", kb_np_back()); return
+    active = bool(NP_SCHED.status().get("active"))
+
+    if data == "np:status":
+        await send(update, banner("📊 TRẠNG THÁI TOOL", _np_status_text()), kb_np_back()); return
+
+    if data == "np:off":
+        if not active:
+            await send(update, banner("⏹ TẮT TOOL", "Hiện không có lịch nào đang bật."), kb_np_back()); return
+        if not _np_can_control(uid):
+            await send(update, "❌ Lịch này do admin khác bật.", kb_np_back()); return
+        await NP_SCHED.stop()
+        s.step = None
+        await send(update, banner("⏹ TẮT TOOL", "✅ Đã dừng lịch và lưu trạng thái.\n\n" + _np_status_text()),
+                   kb_np_back()); return
+
+    if active and data in ("np:on", "np:acc", "np:time", "np:confirm") or (active and data.startswith("np:pick:")):
+        await send(update, banner("⚠ LỊCH ĐANG CHẠY",
+            "Đang có lịch hoạt động. Hãy bấm <b>⏹ Tắt Tool</b> trước khi đổi tài khoản/giờ.\n\n"
+            + _np_status_text()), kb_naprut()); return
+
+    if data == "np:on":
+        s.data.pop("np_account", None); s.data.pop("np_time", None)
+        await _np_next(update, ctx); return
+    if data == "np:acc":
+        s.data.pop("np_account", None)
+        await _np_ask_account(update, ctx); return
+    if data == "np:time":
+        s.data.pop("np_time", None)
+        await _np_ask_time(update, ctx); return
+    if data.startswith("np:pick:"):
+        name = data.split(":", 2)[2]
+        if name not in list_sessions_for(uid):
+            await send(update, "❌ Tài khoản không hợp lệ.", kb_np_back()); return
+        s.data["np_account"] = name
+        await _np_next(update, ctx); return
+    if data == "np:confirm":
+        acc, tm = s.data.get("np_account"), s.data.get("np_time")
+        if not acc or not tm:
+            await _np_next(update, ctx); return
+        try:
+            await NP_SCHED.start(acc, tm, owner_id=uid)
+        except (ValueError, RuntimeError) as e:
+            await send(update, f"❌ {_html_escape(str(e))}", kb_np_back()); return
+        s.step = None
+        s.data.pop("np_account", None); s.data.pop("np_time", None)
+        await send(update, banner("🔛 ĐÃ BẬT TOOL", _np_status_text()), kb_np_back()); return
+
+
+async def step_naprut(update, ctx, text: str):
+    s = st(update.effective_user.id)
+    if s.step == "np.time":
+        try:
+            t = np_sched.parse_run_time(text)
+        except ValueError as e:
+            await update.message.reply_text(f"❌ {e}", reply_markup=kb_np_back()); return
+        s.data["np_time"] = t.strftime("%H:%M")
+        await _np_next(update, ctx); return
+    # các step np khác chờ bấm nút
+    await update.message.reply_text("👉 Hãy bấm nút trên menu.", reply_markup=kb_np_back())
+
+
 # ─── main ───────────────────────────────────────────────
 async def _post_init(app: Application):
     # Khôi phục scheduler auto-leave sau khi Railway restart
     log.info("Restoring join auto-leave scheduler...")
     asyncio.create_task(mod_join.scheduler_loop())
-    # Bật scheduler đăng TikTok 07:00 mỗi ngày
-    mod_tiktok.start_scheduler(app)
+    # Khôi phục lịch điểm danh NAPRUT 7 ngày (nếu còn hiệu lực)
+    global NP_SCHED
+
+    async def _np_notify(text: str):
+        owner = (NP_SCHED.status() or {}).get("owner_id") if NP_SCHED else None
+        targets = [owner] if owner else sorted(ADMIN_IDS)
+        for t in targets:
+            try:
+                await app.bot.send_message(t, f"🎁 <b>NAPRUT</b>\n{text}",
+                                           parse_mode=ParseMode.HTML)
+            except Exception:
+                log.warning("Không gửi được thông báo NAPRUT tới %s", t)
+
+    NP_SCHED = np_sched.SevenDayScheduler(
+        task_callback=mod_naprut.run_checkin, notify=_np_notify)
+    restored = await NP_SCHED.restore()
+    log.info("NAPRUT schedule restored: %s", restored)
 
 
 def main():
     app = Application.builder().token(BOT_TOKEN).post_init(_post_init).build()
-    # Gắn chức năng TIKTOK trước các handler cũ (group=-1, không ảnh hưởng code cũ)
-    mod_tiktok.register(app)
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CallbackQueryHandler(on_del_pick, pattern=r"^acc:delpick:"))
     app.add_handler(CallbackQueryHandler(on_callback))
