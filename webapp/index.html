@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>FULL TOOL — Mini App</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Manrope:wght@400;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#07090d; --bg2:#0d1118; --card:rgba(255,255,255,.045); --card-b:rgba(255,255,255,.08);
+    --fg:#eef2f7; --mut:#8a94a6; --acc:#c6ff3d; --acc2:#3de0ff; --danger:#ff4d6d; --warn:#ffb03d;
+    --r:18px; --safe-b:env(safe-area-inset-bottom,0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--fg);font-family:Manrope,system-ui,sans-serif;min-height:100%}
+  body{background:
+    radial-gradient(600px 300px at 110% -10%, rgba(61,224,255,.16), transparent 60%),
+    radial-gradient(500px 320px at -20% 10%, rgba(198,255,61,.12), transparent 60%), var(--bg);
+    padding-bottom:calc(84px + var(--safe-b));}
+  h1,h2,h3,.disp{font-family:"Space Grotesk",sans-serif;letter-spacing:-.02em;margin:0}
+  .wrap{padding:18px 16px 8px;max-width:560px;margin:0 auto}
+  .top{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  .ava{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font:700 20px "Space Grotesk";
+    color:#07090d;background:linear-gradient(135deg,var(--acc),var(--acc2));box-shadow:0 8px 28px rgba(198,255,61,.25)}
+  .top .n{font-weight:700;font-size:17px}.top .s{color:var(--mut);font-size:12.5px}
+  .pill{margin-left:auto;font-size:11px;font-weight:700;padding:6px 10px;border-radius:99px;border:1px solid var(--card-b);background:var(--card);text-transform:uppercase;letter-spacing:.06em}
+  .pill.run{color:var(--acc);border-color:rgba(198,255,61,.4)}
+  .pill.run::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--acc);margin-right:6px;animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{opacity:.25}}
+  .card{background:var(--card);border:1px solid var(--card-b);border-radius:var(--r);padding:16px;backdrop-filter:blur(10px)}
+  .hero{position:relative;overflow:hidden;padding:20px}
+  .hero .lbl{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.1em}
+  .hero .big{font:700 30px "Space Grotesk";margin:6px 0 2px;background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero .sub{color:var(--mut);font-size:13px}
+  .hero::after{content:"";position:absolute;right:-40px;top:-40px;width:150px;height:150px;border-radius:50%;border:1px dashed rgba(198,255,61,.25);animation:spin 18s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}
+  .stat{padding:12px;text-align:left}.stat b{display:block;font:700 20px "Space Grotesk"}.stat span{font-size:11.5px;color:var(--mut)}
+  .sec{display:flex;justify-content:space-between;align-items:baseline;margin:22px 2px 10px}
+  .sec h3{font-size:16px}.sec small{color:var(--mut);font-size:12px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .tool{position:relative;text-align:left;border:1px solid var(--card-b);background:var(--card);color:var(--fg);border-radius:var(--r);padding:14px;
+    font:inherit;cursor:pointer;transition:transform .15s,border-color .2s,background .2s;opacity:0;animation:rise .45s forwards}
+  .tool:active{transform:scale(.96)}
+  .tool:hover{border-color:rgba(198,255,61,.35)}
+  .tool .ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:20px;background:rgba(255,255,255,.06);margin-bottom:12px}
+  .tool b{display:block;font-size:14px}.tool span{font-size:11.5px;color:var(--mut);line-height:1.35;display:block;margin-top:3px}
+  .tool.locked{opacity:.38!important;filter:grayscale(1)}
+  .tool.locked::after{content:"🔒";position:absolute;top:12px;right:12px;font-size:13px}
+  .tool.wide{grid-column:span 2;display:flex;align-items:center;gap:12px}.tool.wide .ic{margin:0}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:0;border-radius:14px;padding:14px;font:700 14px Manrope;cursor:pointer;transition:transform .15s}
+  .btn:active{transform:scale(.97)}
+  .btn.pri{background:var(--acc);color:#07090d}.btn.ghost{background:var(--card);color:var(--fg);border:1px solid var(--card-b)}
+  .btn.danger{background:rgba(255,77,109,.12);color:var(--danger);border:1px solid rgba(255,77,109,.35)}
+  .row{display:flex;gap:10px}.row>*{flex:1}
+  .logs{font:12px/1.55 "JetBrains Mono",monospace;background:#05070a;border:1px solid var(--card-b);border-radius:14px;padding:12px;min-height:240px;max-height:58vh;overflow:auto;white-space:pre-wrap;word-break:break-word;color:#b9c4d4}
+  .logs .ln{padding:1px 0;border-bottom:1px dashed rgba(255,255,255,.04)}
+  .list .it{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--card-b)}
+  .list .it:last-child{border:0}.list .dot{width:34px;height:34px;border-radius:10px;background:rgba(61,224,255,.12);display:grid;place-items:center}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;font-size:13px}.kv dt{color:var(--mut)}.kv dd{margin:0;text-align:right;font-weight:600}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}.chip{font-size:11.5px;padding:6px 10px;border-radius:99px;background:rgba(198,255,61,.08);border:1px solid rgba(198,255,61,.22)}
+  .tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;padding:8px 10px calc(8px + var(--safe-b));background:rgba(7,9,13,.86);backdrop-filter:blur(16px);border-top:1px solid var(--card-b);display:flex;justify-content:space-around}
+  .tab{flex:1;background:none;border:0;color:var(--mut);font:600 11px Manrope;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px;border-radius:12px;cursor:pointer}
+  .tab svg{width:22px;height:22px}.tab.on{color:var(--acc)}.tab.on svg{filter:drop-shadow(0 0 8px rgba(198,255,61,.6))}
+  .view{display:none}.view.on{display:block;animation:rise .3s}
+  .toast{position:fixed;left:50%;bottom:calc(96px + var(--safe-b));transform:translate(-50%,20px);opacity:0;background:#151b25;border:1px solid var(--card-b);padding:12px 16px;border-radius:14px;font-size:13px;transition:.25s;z-index:30;max-width:90vw;text-align:center}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+  .center{min-height:80vh;display:grid;place-items:center;text-align:center;padding:24px}
+  .spin{width:34px;height:34px;border-radius:50%;border:3px solid var(--card-b);border-top-color:var(--acc);animation:spin .8s linear infinite;margin:0 auto 14px}
+  .muted{color:var(--mut);font-size:13px}
+  .empty{color:var(--mut);text-align:center;padding:24px 0;font-size:13px}
+</style>
+</head>
+<body>
+<div id="boot" class="center"><div><div class="spin"></div><div class="muted">Đang kết nối…</div></div></div>
+<div id="denied" class="center" style="display:none"></div>
+
+<div id="app" style="display:none">
+  <!-- HOME -->
+  <section class="view on" data-view="home"><div class="wrap">
+    <div class="top">
+      <div class="ava" id="ava">?</div>
+      <div><div class="n" id="uname">—</div><div class="s" id="uid">ID —</div></div>
+      <div class="pill" id="statusPill">IDLE</div>
+    </div>
+    <div class="card hero">
+      <div class="lbl">Thời gian thuê còn lại</div>
+      <div class="big" id="remain">—</div>
+      <div class="sub" id="expiry">—</div>
+    </div>
+    <div class="stats">
+      <div class="card stat"><b id="stSess">0</b><span>Sessions</span></div>
+      <div class="card stat"><b id="stPerm">0</b><span>Quyền</span></div>
+      <div class="card stat"><b id="stNp">—</b><span>Naprut</span></div>
+    </div>
+    <div class="row">
+      <button class="btn pri" data-act="m:home">🏠 Menu trong chat</button>
+      <button class="btn danger" id="stopBtn" data-act="m:stop" data-perm="STOP" data-stay>⛔ Stop task</button>
+    </div>
+    <div class="sec"><h3>Truy cập nhanh</h3><small>Mở chức năng trong chat</small></div>
+    <div class="grid" id="quick"></div>
+  </div></section>
+
+  <!-- TOOLS -->
+  <section class="view" data-view="tools"><div class="wrap">
+    <div class="sec" style="margin-top:4px"><h3 class="disp" style="font-size:24px">Chức năng</h3><small id="permCount"></small></div>
+    <p class="muted" style="margin:-4px 2px 14px">Bấm thẻ để bắt đầu — bot sẽ hướng dẫn từng bước trong chat.</p>
+    <div class="grid" id="tools"></div>
+  </div></section>
+
+  <!-- LOGS -->
+  <section class="view" data-view="logs"><div class="wrap">
+    <div class="sec" style="margin-top:4px"><h3 class="disp" style="font-size:24px">Live log</h3><small id="logMeta">tự làm mới 4s</small></div>
+    <div class="logs" id="logs"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn ghost" id="refreshBtn">↻ Làm mới</button>
+      <button class="btn danger" data-act="m:stop" data-perm="STOP" data-stay>⛔ Stop</button>
+    </div>
+  </div></section>
+
+  <!-- ACCOUNT -->
+  <section class="view" data-view="acc"><div class="wrap">
+    <div class="sec" style="margin-top:4px"><h3 class="disp" style="font-size:24px">Tài khoản</h3><small id="sessCount"></small></div>
+    <div class="card list" id="sessList"></div>
+    <div style="margin-top:12px" class="row">
+      <button class="btn pri" data-act="m:acc" data-perm="MANAGE_ACC">👤 Quản lý ACC</button>
+    </div>
+    <div class="sec"><h3>Điểm danh NAPRUT</h3><small id="npState"></small></div>
+    <div class="card"><dl class="kv" id="npKv"></dl>
+      <button class="btn ghost" style="margin-top:14px" data-act="m:naprut">🎁 Mở menu NAPRUT</button>
+    </div>
+    <div class="sec"><h3>Quyền được cấp</h3></div>
+    <div class="card chips" id="perms"></div>
+    <div id="ownerBox" style="display:none;margin-top:12px">
+      <button class="btn ghost" data-act="m:admins">🛠 Quản lý admin</button>
+    </div>
+  </div></section>
+
+  <nav class="tabs">
+    <button class="tab on" data-tab="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Trang chủ</button>
+    <button class="tab" data-tab="tools"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Chức năng</button>
+    <button class="tab" data-tab="logs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h13"/></svg>Log</button>
+    <button class="tab" data-tab="acc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Tài khoản</button>
+  </nav>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const tg = window.Telegram && window.Telegram.WebApp;
+const TOOLS = [
+  {a:"m:check", p:"CHECK", ic:"🛡", t:"Check Join", d:"Kiểm tra thành viên nhóm/kênh", c:"#3de0ff"},
+  {a:"m:auto",  p:"AUTO",  ic:"🤖", t:"Auto", d:"Chạy tự động bằng các acc", c:"#c6ff3d"},
+  {a:"m:rai",   p:"RAI",   ic:"📢", t:"Tool Rải", d:"Rải tin nhắn vào nhiều nhóm", c:"#ffb03d"},
+  {a:"m:ref",   p:"REF",   ic:"🎯", t:"Ref", d:"Chạy link giới thiệu", c:"#ff7ad9"},
+  {a:"m:spam",  p:"SPAM",  ic:"💬", t:"Sex Spam", d:"Gửi nội dung hàng loạt", c:"#ff4d6d"},
+  {a:"m:join",  p:"JOIN",  ic:"🚪", t:"Join Group", d:"Vào nhóm & tự rời theo lịch", c:"#7aa2ff"},
+  {a:"m:duyet", p:"DUYET", ic:"✅", t:"Duyệt nạp", d:"Duyệt yêu cầu nạp", c:"#3dffb0"},
+  {a:"m:naprut",p:null,    ic:"🎁", t:"Điểm danh Naprut", d:"Lịch tự điểm danh 7 ngày", c:"#ffd23d"},
+  {a:"m:acc",   p:"MANAGE_ACC", ic:"👤", t:"Quản lý ACC", d:"Thêm, xoá, import/export session", c:"#3de0ff"},
+  {a:"m:logs",  p:"LOGS",  ic:"📜", t:"Logs", d:"Gửi log hiện tại vào chat", c:"#b9c4d4"},
+  {a:"m:status",p:"LOGS",  ic:"📊", t:"Status", d:"Trạng thái task & step", c:"#b9c4d4"},
+];
+let ME = null, poll = null;
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("on"),2200)}
+function haptic(k="light"){try{tg.HapticFeedback.impactOccurred(k)}catch(e){}}
+
+async function api(path, body={}){
+  const r = await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({...body, initData: tg ? tg.initData : ""})});
+  if(r.status===401) throw new Error("auth");
+  return r.json();
+}
+
+function can(p){ return !p || (ME && ME.perms && ME.perms[p]); }
+
+function toolCard(x,i,wide){
+  const b=document.createElement("button");
+  b.className="tool"+(can(x.p)?"":" locked")+(wide?" wide":"");
+  b.style.animationDelay=(i*40)+"ms";
+  b.dataset.act=x.a; if(x.p) b.dataset.perm=x.p;
+  b.innerHTML=`<div class="ic" style="color:${x.c};box-shadow:inset 0 0 0 1px ${x.c}33">${x.ic}</div><div><b>${esc(x.t)}</b><span>${esc(x.d)}</span></div>`;
+  return b;
+}
+
+function render(){
+  const name=[ME.first_name].filter(Boolean).join(" ")||"User";
+  $("#ava").textContent=name[0].toUpperCase();
+  $("#uname").textContent=name+(ME.owner?" · Owner":"");
+  $("#uid").textContent="ID "+ME.uid+(ME.username?" · @"+ME.username:"");
+  const pill=$("#statusPill"); pill.textContent=ME.status; pill.classList.toggle("run",ME.task_running);
+  $("#remain").textContent=ME.remaining; $("#expiry").textContent="Hết hạn: "+ME.expiry_at;
+  $("#stSess").textContent=ME.sessions.length; $("#stPerm").textContent=ME.perm_labels.length;
+  const np=ME.naprut||{}; $("#stNp").textContent=np.active?"BẬT":"TẮT"; $("#stNp").style.color=np.active?"var(--acc)":"var(--mut)";
+
+  const q=$("#quick"); q.innerHTML=""; TOOLS.filter(t=>can(t.p)).slice(0,4).forEach((t,i)=>q.appendChild(toolCard(t,i)));
+  if(!q.children.length) q.innerHTML='<div class="empty" style="grid-column:span 2">Chưa có quyền nào.</div>';
+  const g=$("#tools"); g.innerHTML=""; TOOLS.forEach((t,i)=>g.appendChild(toolCard(t,i,t.a==="m:naprut")));
+  $("#permCount").textContent=TOOLS.filter(t=>can(t.p)).length+"/"+TOOLS.length+" mở khoá";
+
+  const sl=$("#sessList"); $("#sessCount").textContent=ME.sessions.length+" session";
+  sl.innerHTML=ME.sessions.length?ME.sessions.map(s=>`<div class="it"><div class="dot">📱</div><div><b>${esc(s)}</b><div class="muted">Telethon session</div></div></div>`).join(""):'<div class="empty">Chưa có session nào.</div>';
+  $("#npState").textContent=np.active?"🟢 Đang bật":"🔴 Đang tắt";
+  const fmt=v=>v?esc(String(v).replace("T"," ").slice(0,16)):"—";
+  $("#npKv").innerHTML=`<dt>Tài khoản</dt><dd>${esc(np.account||"—")}</dd><dt>Giờ chạy</dt><dd>${esc(np.daily_time||"—")} (UTC+7)</dd><dt>Bắt đầu</dt><dd>${fmt(np.started_at)}</dd><dt>Kết thúc</dt><dd>${fmt(np.expires_at)}</dd><dt>Đã điểm danh</dt><dd>${(np.completed_dates||[]).length} ngày</dd>`;
+  $("#perms").innerHTML=ME.perm_labels.length?ME.perm_labels.map(p=>`<span class="chip">${esc(p)}</span>`).join(""):'<span class="muted">(chưa có)</span>';
+  $("#ownerBox").style.display=ME.owner?"block":"none";
+  document.querySelectorAll("[data-act][data-perm]").forEach(b=>{ if(!b.classList.contains("tool")) b.disabled=!can(b.dataset.perm), b.style.opacity=can(b.dataset.perm)?1:.4; });
+  renderLogs();
+}
+function renderLogs(){
+  const l=$("#logs"), atBottom=l.scrollHeight-l.scrollTop-l.clientHeight<30;
+  l.innerHTML=ME.logs.length?ME.logs.map(x=>`<div class="ln">${esc(x)}</div>`).join(""):'<div class="empty">(chưa có log)</div>';
+  if(atBottom) l.scrollTop=l.scrollHeight;
+  $("#logMeta").textContent=ME.status+" · tự làm mới 4s";
+}
+
+async function load(){ ME=await api("/api/me"); return ME; }
+
+async function act(action, stay){
+  haptic("medium");
+  try{
+    const r=await api("/api/action",{action});
+    if(!r.ok) throw new Error(r.error||"error");
+    try{tg.HapticFeedback.notificationOccurred("success")}catch(e){}
+    if(stay){ toast("✅ Đã gửi yêu cầu"); setTimeout(()=>load().then(render),600); }
+    else { toast("✅ Đã mở trong chat với bot"); setTimeout(()=>tg&&tg.close(),700); }
+  }catch(e){ try{tg.HapticFeedback.notificationOccurred("error")}catch(_){}
+    toast(e.message==="auth"?"Phiên hết hạn, mở lại Mini App":"❌ Lỗi: "+e.message); }
+}
+
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-act]");
+  if(b){ if(b.classList.contains("locked")||b.disabled){ toast("🔒 Bạn chưa được cấp quyền này"); haptic("rigid"); return; }
+    act(b.dataset.act, b.hasAttribute("data-stay")); return; }
+  const t=e.target.closest("[data-tab]");
+  if(t){ haptic(); document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x===t));
+    document.querySelectorAll(".view").forEach(v=>v.classList.toggle("on",v.dataset.view===t.dataset.tab));
+    window.scrollTo(0,0);
+    clearInterval(poll); if(t.dataset.tab==="logs"){ poll=setInterval(()=>load().then(renderLogs).catch(()=>{}),4000);} }
+});
+$("#refreshBtn").onclick=()=>{haptic();load().then(render)};
+
+(async function boot(){
+  if(tg){ tg.ready(); tg.expand(); try{tg.setHeaderColor("#07090d");tg.setBackgroundColor("#07090d")}catch(e){} }
+  if(!tg || !tg.initData){
+    $("#boot").innerHTML='<div><h2>Mở trong Telegram</h2><p class="muted">Mini App này chỉ hoạt động khi mở từ bot Telegram.</p></div>'; return;
+  }
+  try{ await load(); }catch(e){ $("#boot").innerHTML='<div><h2>Không xác thực được</h2><p class="muted">Hãy đóng và mở lại Mini App từ bot.</p></div>'; return; }
+  $("#boot").style.display="none";
+  if(!ME.admin){
+    const d=$("#denied"); d.style.display="grid";
+    const c=(ME.rent_contact||"").replace("@","");
+    d.innerHTML=`<div><div class="ava" style="margin:0 auto 16px">💼</div><h2>Chưa có quyền sử dụng</h2><p class="muted">Liên hệ admin để thuê tool.<br>User ID: <b>${ME.uid}</b></p><button class="btn pri" style="margin-top:16px" id="ct">Liên hệ ${esc(ME.rent_contact)}</button></div>`;
+    $("#ct").onclick=()=>tg.openTelegramLink("https://t.me/"+c); return;
+  }
+  $("#app").style.display="block"; render();
+})();
+</script>
+</body>
+</html>
