@@ -20,6 +20,7 @@ from urllib.parse import parse_qsl
 
 from aiohttp import web
 from telegram import Chat, Message, Update, User
+from telegram.error import Forbidden
 from telegram.ext import Application, CallbackContext
 
 from config import BOT_TOKEN
@@ -108,11 +109,25 @@ def _make_update(app: Application, tg_user: dict) -> Update:
                 last_name=tg_user.get("last_name"),
                 username=tg_user.get("username"))
     chat = Chat(id=uid, type=Chat.PRIVATE)
+    # FIX: python-telegram-bot chỉ cho dùng shortcut (chat.send_message,
+    # message.reply_text, user.send_message…) khi CHÍNH object đó có bot.
+    # Trước đây chỉ Message/Update được set_bot → update.effective_chat.send_message()
+    # ném "This object has no bot associated with it. Shortcuts cannot be used."
+    # Phải gắn bot cho User và Chat TRƯỚC khi lồng vào Message.
+    user.set_bot(app.bot)
+    chat.set_bot(app.bot)
     msg = Message(message_id=0, date=datetime.now(timezone.utc), chat=chat,
                   from_user=user, text="")
     msg.set_bot(app.bot)
     upd = Update(update_id=0, message=msg)
     upd.set_bot(app.bot)
+    # Kiểm tra an toàn: mọi object shortcut phải có bot
+    for obj in (upd.effective_chat, upd.effective_user, upd.effective_message):
+        if obj is not None:
+            try:
+                obj.get_bot()
+            except RuntimeError:
+                obj.set_bot(app.bot)
     return upd
 
 
@@ -136,7 +151,8 @@ def build_web_app(app: Application, hooks: Hooks) -> web.Application:
         user, _ = await _read_auth(request)
         uid = int(user["id"])
         base = {"uid": uid, "first_name": user.get("first_name", ""),
-                "username": user.get("username"), "rent_contact": hooks.rent_contact}
+                "username": user.get("username"), "rent_contact": hooks.rent_contact,
+                "bot_username": getattr(app.bot, "username", None)}
         if not mod_admins.is_admin(uid):
             return web.json_response({**base, "admin": False})
         s = hooks.get_state(uid)
@@ -172,9 +188,17 @@ def build_web_app(app: Application, hooks: Hooks) -> web.Application:
             if action == "m:home":
                 hooks.schedule_expiry(app, uid, uid)
             await hooks.dispatch(upd, ctx, action)
+        except Forbidden:
+            # User chưa /start bot hoặc đã chặn bot → bot không thể nhắn vào chat
+            log.warning("Mini App action %s: user %s chưa start/đã chặn bot", action, uid)
+            return web.json_response({"ok": False, "error": "bot_blocked",
+                                      "bot_username": getattr(app.bot, "username", None)},
+                                     status=409)
         except Exception as e:  # không để lỗi làm sập bot
             log.exception("Mini App action %s failed", action)
-            return web.json_response({"ok": False, "error": str(e)}, status=500)
+            return web.json_response({"ok": False, "error": str(e),
+                                      "bot_username": getattr(app.bot, "username", None)},
+                                     status=500)
         return web.json_response({"ok": True})
 
     async def index(_request: web.Request):
