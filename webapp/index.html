@@ -72,6 +72,16 @@
   .spin{width:34px;height:34px;border-radius:50%;border:3px solid var(--card-b);border-top-color:var(--acc);animation:spin .8s linear infinite;margin:0 auto 14px}
   .muted{color:var(--mut);font-size:13px}
   .empty{color:var(--mut);text-align:center;padding:24px 0;font-size:13px}
+  .chat{display:flex;flex-direction:column;gap:10px;min-height:50vh;max-height:calc(100vh - 230px);overflow:auto;padding:4px 2px}
+  .bub{max-width:92%;padding:10px 12px;border-radius:14px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word;background:var(--card);border:1px solid var(--card-b)}
+  .bub.u{align-self:flex-end;background:rgba(198,255,61,.12);border-color:rgba(198,255,61,.3)}
+  .bub pre,.bub code{font:12px/1.5 "JetBrains Mono",monospace;background:#05070a;border-radius:8px}
+  .bub pre{padding:8px;margin:6px 0 0;overflow:auto;max-height:45vh}.bub code{padding:1px 4px}
+  .bub a{color:var(--acc2)}
+  .kbr{display:flex;gap:6px;margin-top:6px}.kbr button{flex:1;border:1px solid var(--card-b);background:rgba(255,255,255,.06);color:var(--fg);border-radius:10px;padding:9px 6px;font:600 12.5px Manrope;cursor:pointer}
+  .kbr button:active{transform:scale(.96)}
+  .composer{display:flex;gap:8px;margin-top:10px}.composer textarea{flex:1;resize:none;min-height:44px;max-height:120px;border-radius:14px;border:1px solid var(--card-b);background:var(--bg2);color:var(--fg);padding:12px;font:14px Manrope}
+  .composer .btn{width:auto;padding:0 18px}
 </style>
 </head>
 <body>
@@ -97,18 +107,26 @@
       <div class="card stat"><b id="stNp">—</b><span>Naprut</span></div>
     </div>
     <div class="row">
-      <button class="btn pri" data-act="m:home">🏠 Menu trong chat</button>
+      <button class="btn pri" data-act="m:home">🏠 Menu bot</button>
       <button class="btn danger" id="stopBtn" data-act="m:stop" data-perm="STOP" data-stay>⛔ Stop task</button>
     </div>
-    <div class="sec"><h3>Truy cập nhanh</h3><small>Mở chức năng trong chat</small></div>
+    <div class="sec"><h3>Truy cập nhanh</h3><small>Chạy ngay trong Mini App</small></div>
     <div class="grid" id="quick"></div>
   </div></section>
 
   <!-- TOOLS -->
   <section class="view" data-view="tools"><div class="wrap">
     <div class="sec" style="margin-top:4px"><h3 class="disp" style="font-size:24px">Chức năng</h3><small id="permCount"></small></div>
-    <p class="muted" style="margin:-4px 2px 14px">Bấm thẻ để bắt đầu — bot sẽ hướng dẫn từng bước trong chat.</p>
+    <p class="muted" style="margin:-4px 2px 14px">Bấm thẻ để bắt đầu — bot hướng dẫn từng bước ngay tại đây (tab Bot).</p>
     <div class="grid" id="tools"></div>
+  </div></section>
+
+  <!-- BOT (chạy bot ngay trong Mini App) -->
+  <section class="view" data-view="bot"><div class="wrap">
+    <div class="sec" style="margin-top:4px"><h3 class="disp" style="font-size:24px">Bot</h3><small id="botMeta">Chạy ngay trong Mini App</small></div>
+    <div class="chat" id="chat"><div class="empty">Bấm một chức năng để bắt đầu.</div></div>
+    <div class="composer"><textarea id="msgIn" rows="1" placeholder="Nhập trả lời cho bot…"></textarea><button class="btn pri" id="sendBtn">Gửi</button></div>
+    <div class="row" style="margin-top:8px"><button class="btn ghost" data-act="m:home">🏠 Menu</button><button class="btn danger" data-act="m:stop" data-perm="STOP">⛔ Stop</button></div>
   </div></section>
 
   <!-- LOGS -->
@@ -142,6 +160,7 @@
   <nav class="tabs">
     <button class="tab on" data-tab="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Trang chủ</button>
     <button class="tab" data-tab="tools"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Chức năng</button>
+    <button class="tab" data-tab="bot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v11H8l-4 4z"/></svg>Bot</button>
     <button class="tab" data-tab="logs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h13"/></svg>Log</button>
     <button class="tab" data-tab="acc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Tài khoản</button>
   </nav>
@@ -160,7 +179,7 @@ const TOOLS = [
   {a:"m:duyet", p:"DUYET", ic:"✅", t:"Duyệt nạp", d:"Duyệt yêu cầu nạp", c:"#3dffb0"},
   {a:"m:naprut",p:null,    ic:"🎁", t:"Điểm danh Naprut", d:"Lịch tự điểm danh 7 ngày", c:"#ffd23d"},
   {a:"m:acc",   p:"MANAGE_ACC", ic:"👤", t:"Quản lý ACC", d:"Thêm, xoá, import/export session", c:"#3de0ff"},
-  {a:"m:logs",  p:"LOGS",  ic:"📜", t:"Logs", d:"Gửi log hiện tại vào chat", c:"#b9c4d4"},
+  {a:"m:logs",  p:"LOGS",  ic:"📜", t:"Logs", d:"Xem log hiện tại", c:"#b9c4d4"},
   {a:"m:status",p:"LOGS",  ic:"📊", t:"Status", d:"Trạng thái task & step", c:"#b9c4d4"},
 ];
 let ME = null, poll = null;
@@ -256,28 +275,73 @@ async function act(action, stay){
   haptic("medium");
   try{
     const r=await api("/api/action",{action});
-    if(!r.ok){
-      try{tg.HapticFeedback.notificationOccurred("error")}catch(_){}
-      if(r.error==="bot_blocked"){ showFallback("Bot chưa thể nhắn cho bạn. Hãy mở chat với bot, bấm Start (hoặc bỏ chặn) rồi thử lại."); return; }
-      if(/no bot associated|Shortcuts cannot be used/i.test(r.error||"")){ showFallback("Chức năng này cần mở trong chat với bot. Hãy mở bot và chọn lại từ menu."); return; }
-      throw new Error(r.error||"error");
-    }
+    if(!r.ok) throw new Error(r.error||"error");
     try{tg.HapticFeedback.notificationOccurred("success")}catch(e){}
     if(stay){ toast("✅ Đã gửi yêu cầu"); setTimeout(()=>load().then(render),600); }
-    else { toast("✅ Đã mở trong chat với bot"); setTimeout(backToChat,700); }
+    showTab("bot");
   }catch(e){ try{tg.HapticFeedback.notificationOccurred("error")}catch(_){}
     toast(e.message==="auth"?"Phiên hết hạn, mở lại Mini App":"❌ Lỗi: "+e.message); }
 }
+
+// ── Khung chat bot trong Mini App ──
+const OK_TAGS={B:1,STRONG:1,I:1,EM:1,U:1,INS:1,S:1,STRIKE:1,DEL:1,CODE:1,PRE:1,A:1,BR:1,BLOCKQUOTE:1,SPAN:1,"TG-SPOILER":1};
+function safeHtml(h){
+  const d=new DOMParser().parseFromString("<div>"+(h||"")+"</div>","text/html");
+  (function walk(n){ [...n.childNodes].forEach(c=>{ if(c.nodeType===1){
+      if(!OK_TAGS[c.tagName]){ c.replaceWith(document.createTextNode(c.textContent)); return; }
+      [...c.attributes].forEach(a=>{ if(!(c.tagName==="A"&&a.name==="href"&&/^(https?:|tg:)/i.test(a.value))) c.removeAttribute(a.name); });
+      walk(c);} }); })(d.body.firstChild);
+  return d.body.firstChild.innerHTML;
+}
+let CHAT_LAST=-1, chatPoll=null;
+function renderChat(j){
+  const c=$("#chat"), atBottom=c.scrollHeight-c.scrollTop-c.clientHeight<40;
+  if(!j.messages.length){ c.innerHTML='<div class="empty">Bấm một chức năng để bắt đầu.</div>'; return; }
+  c.innerHTML=j.messages.map(m=>{
+    const kb=(m.kb||[]).map(row=>'<div class="kbr">'+row.map(b=>b.data!=null
+      ?`<button data-mid="${esc(m.id)}" data-cb="${esc(b.data)}">${esc(b.text)}</button>`
+      :b.url?`<button data-url="${esc(b.url)}">${esc(b.text)} ↗</button>`:"").join("")+'</div>').join("");
+    return `<div class="bub ${m.from==="user"?"u":""}">${m.doc?"📎 "+esc(m.doc)+"\n":""}${safeHtml(m.html)}${kb}</div>`;
+  }).join("");
+  if(atBottom||CHAT_LAST<0) c.scrollTop=c.scrollHeight;
+}
+async function chatTick(force){
+  try{ const j=await api("/api/chat",{});
+    (j.toasts||[]).forEach(t=>toast(t));
+    $("#botMeta").textContent=(j.status||"")+(j.step?" · đang chờ nhập: "+j.step:"")+(j.task_running?" · đang chạy":"");
+    if(force||j.last!==CHAT_LAST){ renderChat(j); CHAT_LAST=j.last; }
+  }catch(e){}
+}
+function showTab(name){
+  document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x.dataset.tab===name));
+  document.querySelectorAll(".view").forEach(v=>v.classList.toggle("on",v.dataset.view===name));
+  window.scrollTo(0,0);
+  clearInterval(poll); clearInterval(chatPoll);
+  if(name==="logs") poll=setInterval(()=>load().then(renderLogs).catch(()=>{}),4000);
+  if(name==="bot"){ chatTick(true); chatPoll=setInterval(chatTick,1500); }
+}
+async function sendText(){
+  const i=$("#msgIn"), t=i.value.trim(); if(!t) return;
+  i.value=""; haptic();
+  try{ const r=await api("/api/send",{text:t}); if(!r.ok) toast("❌ "+(r.error||"lỗi")); }catch(e){ toast("❌ Lỗi gửi"); }
+  setTimeout(()=>chatTick(true),400);
+}
+$("#sendBtn").onclick=sendText;
+$("#msgIn").addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendText(); } });
+$("#chat").addEventListener("click",async e=>{
+  const u=e.target.closest("[data-url]"); if(u){ openTg(u.dataset.url); return; }
+  const b=e.target.closest("[data-cb]"); if(!b) return;
+  haptic(); b.style.opacity=.5;
+  try{ const r=await api("/api/press",{message_id:b.dataset.mid,data:b.dataset.cb}); if(!r.ok) toast("❌ "+(r.error||"lỗi")); }catch(_){ toast("❌ Lỗi"); }
+  setTimeout(()=>chatTick(true),400);
+});
 
 document.addEventListener("click",e=>{
   const b=e.target.closest("[data-act]");
   if(b){ if(b.classList.contains("locked")||b.disabled){ toast("🔒 Bạn chưa được cấp quyền này"); haptic("rigid"); return; }
     act(b.dataset.act, b.hasAttribute("data-stay")); return; }
   const t=e.target.closest("[data-tab]");
-  if(t){ haptic(); document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x===t));
-    document.querySelectorAll(".view").forEach(v=>v.classList.toggle("on",v.dataset.view===t.dataset.tab));
-    window.scrollTo(0,0);
-    clearInterval(poll); if(t.dataset.tab==="logs"){ poll=setInterval(()=>load().then(renderLogs).catch(()=>{}),4000);} }
+  if(t){ haptic(); showTab(t.dataset.tab); }
 });
 $("#refreshBtn").onclick=()=>{haptic();load().then(render)};
 
