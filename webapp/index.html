@@ -169,12 +169,42 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("on"),2200)}
 function haptic(k="light"){try{tg.HapticFeedback.impactOccurred(k)}catch(e){}}
+// Chỉ gọi API Telegram khi phiên bản client hỗ trợ (tránh lỗi ở client cũ / ngoài Telegram)
+function tgSupports(v){ try{ return !!(tg && tg.isVersionAtLeast && tg.isVersionAtLeast(v)); }catch(e){ return false; } }
+function botLink(){ const u=(ME&&ME.bot_username)||""; return u?"https://t.me/"+u.replace("@",""):""; }
+// Mở link t.me an toàn: Telegram API nếu có, không thì mở tab thường
+function openTg(url){
+  if(!url){ toast("Không xác định được bot. Hãy mở lại Mini App từ bot."); return; }
+  try{ if(tg && typeof tg.openTelegramLink==="function"){ tg.openTelegramLink(url); return; } }catch(e){}
+  try{ if(tg && typeof tg.openLink==="function"){ tg.openLink(url); return; } }catch(e){}
+  window.open(url,"_blank");
+}
+// Quay về chat với bot: đóng Mini App nếu được, nếu không thì mở link bot
+function backToChat(){
+  try{ if(tg && typeof tg.close==="function" && tg.initData){ tg.close(); return; } }catch(e){}
+  openTg(botLink());
+}
+// Hộp thoại thay thế khi chức năng không chạy được trong chat
+function showFallback(msg){
+  const link=botLink();
+  if(tg && tgSupports("6.2") && typeof tg.showPopup==="function" && link){
+    try{
+      tg.showPopup({title:"Không mở được trong chat",message:msg,
+        buttons:[{id:"open",type:"default",text:"Mở chat với bot"},{type:"cancel"}]},
+        id=>{ if(id==="open") openTg(link); });
+      return;
+    }catch(e){}
+  }
+  toast(msg+(link?" — mở @"+ME.bot_username+" và gõ /start":""));
+}
 
 async function api(path, body={}){
   const r = await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({...body, initData: tg ? tg.initData : ""})});
   if(r.status===401) throw new Error("auth");
-  return r.json();
+  let j={}; try{ j=await r.json(); }catch(e){ j={ok:false,error:"bad_response"}; }
+  if(j && j.bot_username && ME && !ME.bot_username) ME.bot_username=j.bot_username;
+  return j;
 }
 
 function can(p){ return !p || (ME && ME.perms && ME.perms[p]); }
@@ -226,10 +256,15 @@ async function act(action, stay){
   haptic("medium");
   try{
     const r=await api("/api/action",{action});
-    if(!r.ok) throw new Error(r.error||"error");
+    if(!r.ok){
+      try{tg.HapticFeedback.notificationOccurred("error")}catch(_){}
+      if(r.error==="bot_blocked"){ showFallback("Bot chưa thể nhắn cho bạn. Hãy mở chat với bot, bấm Start (hoặc bỏ chặn) rồi thử lại."); return; }
+      if(/no bot associated|Shortcuts cannot be used/i.test(r.error||"")){ showFallback("Chức năng này cần mở trong chat với bot. Hãy mở bot và chọn lại từ menu."); return; }
+      throw new Error(r.error||"error");
+    }
     try{tg.HapticFeedback.notificationOccurred("success")}catch(e){}
     if(stay){ toast("✅ Đã gửi yêu cầu"); setTimeout(()=>load().then(render),600); }
-    else { toast("✅ Đã mở trong chat với bot"); setTimeout(()=>tg&&tg.close(),700); }
+    else { toast("✅ Đã mở trong chat với bot"); setTimeout(backToChat,700); }
   }catch(e){ try{tg.HapticFeedback.notificationOccurred("error")}catch(_){}
     toast(e.message==="auth"?"Phiên hết hạn, mở lại Mini App":"❌ Lỗi: "+e.message); }
 }
@@ -247,7 +282,8 @@ document.addEventListener("click",e=>{
 $("#refreshBtn").onclick=()=>{haptic();load().then(render)};
 
 (async function boot(){
-  if(tg){ tg.ready(); tg.expand(); try{tg.setHeaderColor("#07090d");tg.setBackgroundColor("#07090d")}catch(e){} }
+  if(tg){ try{tg.ready(); tg.expand();}catch(e){}
+    if(tgSupports("6.1")){ try{tg.setHeaderColor("#07090d");tg.setBackgroundColor("#07090d")}catch(e){} } }
   if(!tg || !tg.initData){
     $("#boot").innerHTML='<div><h2>Mở trong Telegram</h2><p class="muted">Mini App này chỉ hoạt động khi mở từ bot Telegram.</p></div>'; return;
   }
@@ -257,7 +293,7 @@ $("#refreshBtn").onclick=()=>{haptic();load().then(render)};
     const d=$("#denied"); d.style.display="grid";
     const c=(ME.rent_contact||"").replace("@","");
     d.innerHTML=`<div><div class="ava" style="margin:0 auto 16px">💼</div><h2>Chưa có quyền sử dụng</h2><p class="muted">Liên hệ admin để thuê tool.<br>User ID: <b>${ME.uid}</b></p><button class="btn pri" style="margin-top:16px" id="ct">Liên hệ ${esc(ME.rent_contact)}</button></div>`;
-    $("#ct").onclick=()=>tg.openTelegramLink("https://t.me/"+c); return;
+    $("#ct").onclick=()=>openTg(c?"https://t.me/"+c:""); return;
   }
   $("#app").style.display="block"; render();
 })();
